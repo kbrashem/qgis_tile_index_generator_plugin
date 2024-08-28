@@ -27,6 +27,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog
 
 # Initialize Qt resources from file resources.py
 from .resources import *
+
 # Import the code for the dialog
 from .tile_index_generator_dialog import TileIndexGeneratorDialog
 import os.path, os
@@ -36,7 +37,17 @@ from shapely.geometry import box
 import pandas as pd
 
 from .DrawRect import RectangleMapTool
-from qgis.core import QgsProject, QgsGeometry, QgsVectorFileWriter, QgsFields, QgsField, QgsWkbTypes, QgsFeature, QgsCoordinateReferenceSystem, QgsVectorLayer
+from qgis.core import (
+    QgsProject,
+    QgsGeometry,
+    QgsVectorFileWriter,
+    QgsFields,
+    QgsField,
+    QgsWkbTypes,
+    QgsFeature,
+    QgsCoordinateReferenceSystem,
+    QgsVectorLayer,
+)
 
 
 class TileIndexGenerator:
@@ -56,11 +67,10 @@ class TileIndexGenerator:
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
         # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
+        locale = QSettings().value("locale/userLocale")[0:2]
         locale_path = os.path.join(
-            self.plugin_dir,
-            'i18n',
-            'TileIndexGenerator_{}.qm'.format(locale))
+            self.plugin_dir, "i18n", "TileIndexGenerator_{}.qm".format(locale)
+        )
 
         if os.path.exists(locale_path):
             self.translator = QTranslator()
@@ -69,7 +79,7 @@ class TileIndexGenerator:
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&Tile Index Generator')
+        self.menu = self.tr("&Tile Index Generator")
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -88,8 +98,7 @@ class TileIndexGenerator:
         :rtype: QString
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
-        return QCoreApplication.translate('TileIndexGenerator', message)
-
+        return QCoreApplication.translate("TileIndexGenerator", message)
 
     def add_action(
         self,
@@ -101,7 +110,8 @@ class TileIndexGenerator:
         add_to_toolbar=True,
         status_tip=None,
         whats_this=None,
-        parent=None):
+        parent=None,
+    ):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -157,9 +167,7 @@ class TileIndexGenerator:
             self.iface.addToolBarIcon(action)
 
         if add_to_menu:
-            self.iface.addPluginToMenu(
-                self.menu,
-                action)
+            self.iface.addPluginToMenu(self.menu, action)
 
         self.actions.append(action)
 
@@ -168,267 +176,406 @@ class TileIndexGenerator:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/tile_index_generator/icon.png'
+        icon_path = ":/plugins/tile_index_generator/icon.png"
         self.add_action(
             icon_path,
-            text=self.tr(u'Tile Index Generator'),
+            text=self.tr("Tile Index Generator"),
             callback=self.run,
-            parent=self.iface.mainWindow())
+            parent=self.iface.mainWindow(),
+        )
 
         # will be set False in run()
         self.first_start = True
 
-
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
-            self.iface.removePluginMenu(
-                self.tr(u'&Tile Index Generator'),
-                action)
+            self.iface.removePluginMenu(self.tr("&Tile Index Generator"), action)
             self.iface.removeToolBarIcon(action)
-            
-    def getCanvasExtent(self):        
+
+    def getCanvasExtent(self):
         canvas = QgsProject.instance()
         srs = canvas.crs().authid()
         self.setMaxValues(srs)
-        
+
         if srs in "EPSG:3857":
             ext = self.iface.mapCanvas().extent()
             minx = ext.xMinimum()
             miny = ext.yMinimum()
             maxx = ext.xMaximum()
             maxy = ext.yMaximum()
-            
-            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = -20037508.3428, -20037508.3428, 20037508.3428, 20037508.3428 #EPSG:3857
+
+            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = (
+                -20037508.3428,
+                -20037508.3428,
+                20037508.3428,
+                20037508.3428,
+            )  # EPSG:3857
             self.dlg.lbl_srs.setText(srs)
-            
+
         elif srs == "EPSG:4326":
             ext = self.iface.mapCanvas().extent()
             minx = ext.xMinimum()
             miny = ext.yMinimum()
             maxx = ext.xMaximum()
             maxy = ext.yMaximum()
-            
-            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = -180, -85.05112877980660357, 180, 85.05112877980660357 #EPSG:4326
-            self.dlg.lbl_srs.setText(srs)            
-            
+
+            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = (
+                -180,
+                -85.05112877980660357,
+                180,
+                85.05112877980660357,
+            )  # EPSG:4326
+            self.dlg.lbl_srs.setText(srs)
+
         else:
-            minx=miny=maxx=maxy = 0
+            minx = miny = maxx = maxy = 0
             self.dlg.lbl_srs.setText("Unavaliable")
-            QMessageBox.critical(None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326")
-        
+            QMessageBox.critical(
+                None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326"
+            )
+
         try:
-            if (minx < self.w_minx) or (miny < self.w_miny) or (maxx > self.w_maxx) or (maxy > self.w_maxy):
-                minx=miny=maxx=maxy = 0
-                QMessageBox.critical(None, "ERROR", "Canvas extent is out of CRS extent!")
+            if (
+                (minx < self.w_minx)
+                or (miny < self.w_miny)
+                or (maxx > self.w_maxx)
+                or (maxy > self.w_maxy)
+            ):
+                minx = miny = maxx = maxy = 0
+                QMessageBox.critical(
+                    None, "ERROR", "Canvas extent is out of CRS extent!"
+                )
         except:
-            minx=miny=maxx=maxy = 0
-            
+            minx = miny = maxx = maxy = 0
+
         self.dlg.sb_extent_minx.setValue(minx)
         self.dlg.sb_extent_miny.setValue(miny)
         self.dlg.sb_extent_maxx.setValue(maxx)
         self.dlg.sb_extent_maxy.setValue(maxy)
-            
-     
+
     def getLayerExtent(self):
         layerName = self.dlg.cb_layers.currentText()
         layer = QgsProject.instance().mapLayersByName(layerName)[0]
         srs = layer.crs().authid()
         self.setMaxValues(srs)
-        
+
         if srs == "EPSG:3857":
             minx = layer.extent().xMinimum()
             miny = layer.extent().yMinimum()
             maxx = layer.extent().xMaximum()
             maxy = layer.extent().yMaximum()
-            
-            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = -20037508.3428, -20037508.3428, 20037508.3428, 20037508.3428 #EPSG:3857
+
+            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = (
+                -20037508.3428,
+                -20037508.3428,
+                20037508.3428,
+                20037508.3428,
+            )  # EPSG:3857
             self.dlg.lbl_srs.setText(srs)
-            
+
         elif srs == "EPSG:4326":
             minx = layer.extent().xMinimum()
             miny = layer.extent().yMinimum()
             maxx = layer.extent().xMaximum()
             maxy = layer.extent().yMaximum()
-            
-            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = -180, -85.05112877980660357, 180, 85.05112877980660357 #EPSG:4326
+
+            self.w_minx, self.w_miny, self.w_maxx, self.w_maxy = (
+                -180,
+                -85.05112877980660357,
+                180,
+                85.05112877980660357,
+            )  # EPSG:4326
             self.dlg.lbl_srs.setText(srs)
-            
+
         else:
-            minx=miny=maxx=maxy = 0
+            minx = miny = maxx = maxy = 0
             self.dlg.lbl_srs.setText("Unavaliable")
-            QMessageBox.critical(None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326")
-        
+            QMessageBox.critical(
+                None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326"
+            )
+
         try:
-            if (minx < self.w_minx) or (miny < self.w_miny) or (maxx > self.w_maxx) or (maxy > self.w_maxy):
-                minx=miny=maxx=maxy = 0
-                QMessageBox.critical(None, "ERROR", "Canvas extent is out of CRS extent!")
+            if (
+                (minx < self.w_minx)
+                or (miny < self.w_miny)
+                or (maxx > self.w_maxx)
+                or (maxy > self.w_maxy)
+            ):
+                minx = miny = maxx = maxy = 0
+                QMessageBox.critical(
+                    None, "ERROR", "Canvas extent is out of CRS extent!"
+                )
         except:
-            minx=miny=maxx=maxy = 0
-            
+            minx = miny = maxx = maxy = 0
+
         self.dlg.sb_extent_minx.setValue(minx)
         self.dlg.sb_extent_miny.setValue(miny)
         self.dlg.sb_extent_maxx.setValue(maxx)
         self.dlg.sb_extent_maxy.setValue(maxy)
-    
+
     def setMaxValues(self, srs):
         if srs == 4326:
-            w_minx, w_miny, w_maxx, w_maxy = -180, -85.05112877980660357, 180, 85.05112877980660357 #EPSG:4326
+            w_minx, w_miny, w_maxx, w_maxy = (
+                -180,
+                -85.05112877980660357,
+                180,
+                85.05112877980660357,
+            )  # EPSG:4326
         else:
-            w_minx, w_miny, w_maxx, w_maxy = -20037508.3428, -20037508.3428, 20037508.3428, 20037508.3428 #EPSG:3857
-                
+            w_minx, w_miny, w_maxx, w_maxy = (
+                -20037508.3428,
+                -20037508.3428,
+                20037508.3428,
+                20037508.3428,
+            )  # EPSG:3857
+
         self.dlg.sb_extent_minx.setMinimum(w_minx)
         self.dlg.sb_extent_minx.setMaximum(w_maxx)
-        
+
         self.dlg.sb_extent_miny.setMinimum(w_miny)
         self.dlg.sb_extent_miny.setMaximum(w_maxy)
-        
+
         self.dlg.sb_extent_maxx.setMinimum(w_minx)
         self.dlg.sb_extent_maxx.setMaximum(w_maxx)
-        
+
         self.dlg.sb_extent_maxy.setMinimum(w_miny)
         self.dlg.sb_extent_maxy.setMaximum(w_maxy)
-    
+
     def getDrawnCoor(self, canvas):
         self.dlg.showMinimized()
         self.rect = RectangleMapTool(canvas, self.dlg)
         canvas.setMapTool(self.rect)
-    
+
     def getInfo(self, zoom_levels, minx, miny, maxx, maxy, srs):
         if srs == 4326:
-            w_minx, w_miny, w_maxx, w_maxy = -180, -85.05112877980660357, 180, 85.05112877980660357 #EPSG:4326
+            w_minx, w_miny, w_maxx, w_maxy = (
+                -180,
+                -85.05112877980660357,
+                180,
+                85.05112877980660357,
+            )  # EPSG:4326
         else:
-            w_minx, w_miny, w_maxx, w_maxy = -20037508.3428, -20037508.3428, 20037508.3428, 20037508.3428 #EPSG:3857
-        
+            w_minx, w_miny, w_maxx, w_maxy = (
+                -20037508.3428,
+                -20037508.3428,
+                20037508.3428,
+                20037508.3428,
+            )  # EPSG:3857
+
         report = {}
-        
+
         num_of_x_tiles = 0
         num_of_y_tiles = 0
         number_of_tiles = 0
-        
+
         for z in zoom_levels:
-            grid_size = (w_maxx-w_minx)/2**z
-            
+            grid_size = (w_maxx - w_minx) / 2**z
+
             tile_x_start = int((minx - w_minx) / grid_size)
             tile_x_end = int((maxx - w_minx) / grid_size)
             tile_y_start = int((w_maxy - maxy) / grid_size)
             tile_y_end = int((w_maxy - miny) / grid_size)
-            
-            noxt= np.arange(tile_x_start, tile_x_end + 1).size
+
+            noxt = np.arange(tile_x_start, tile_x_end + 1).size
             noyt = np.arange(tile_y_start, tile_y_end + 1).size
-            not_ = (noxt * noyt)
-            
+            not_ = noxt * noyt
+
             num_of_x_tiles += noxt
             num_of_y_tiles += noyt
             number_of_tiles += not_
-            
+
             report[z] = {
-                "num_of_x_tiles" : noxt,
-                "num_of_y_tiles" : noyt,
-                "number_of_tiles" : not_
+                "num_of_x_tiles": noxt,
+                "num_of_y_tiles": noyt,
+                "number_of_tiles": not_,
             }
-        
+
         report["all"] = {
-            "num_of_x_tiles" : num_of_x_tiles,
-            "num_of_y_tiles" : num_of_y_tiles,
-            "number_of_tiles" : number_of_tiles
+            "num_of_x_tiles": num_of_x_tiles,
+            "num_of_y_tiles": num_of_y_tiles,
+            "number_of_tiles": number_of_tiles,
         }
-        
+
         return report
-    
+
     def createShp(self, df_all, srs, out_path=None, driver="ESRI Shapefile"):
         if out_path is None:
             new_layer = QgsVectorLayer("Polygon", "tiles", "memory")
             pr = new_layer.dataProvider()
-            pr.addAttributes([QgsField('zoom', QVariant.Int),
-                              QgsField('x_tile', QVariant.Int),
-                              QgsField('y_tile_ud', QVariant.Int),
-                              QgsField('y_tile_du', QVariant.Int),
-                              QgsField('minx_coor', QVariant.Double),
-                              QgsField('miny_coor', QVariant.Double),
-                              QgsField('maxx_coor', QVariant.Double),
-                              QgsField('maxy_coor', QVariant.Double)])
+            pr.addAttributes(
+                [
+                    QgsField("zoom", QVariant.Int),
+                    QgsField("x_tile", QVariant.Int),
+                    QgsField("y_tile_ud", QVariant.Int),
+                    QgsField("y_tile_du", QVariant.Int),
+                    QgsField("minx_coor", QVariant.Double),
+                    QgsField("miny_coor", QVariant.Double),
+                    QgsField("maxx_coor", QVariant.Double),
+                    QgsField("maxy_coor", QVariant.Double),
+                    QgsField("quadkey", QVariant.String),
+                ]
+            )
             new_layer.updateFields()
-            
+
             for i, row in df_all.iterrows():
                 feat = QgsFeature()
                 feat.setGeometry(QgsGeometry.fromWkt(row["geometry"]))
                 feat.setAttributes(row.iloc[:-1].tolist())
                 pr.addFeature(feat)
-                
+
             new_layer.updateExtents()
             new_layer.setCrs(QgsCoordinateReferenceSystem.fromEpsgId(srs))
             QgsProject.instance().addMapLayer(new_layer)
-            
+
         else:
             fields = QgsFields()
-            field_list = [QgsField('zoom', QVariant.Int), QgsField('x_tile', QVariant.Int), QgsField('y_tile_ud', QVariant.Int), QgsField('y_tile_du', QVariant.Int), QgsField('minx_coor', QVariant.Double), QgsField('miny_coor', QVariant.Double), QgsField('maxx_coor', QVariant.Double), QgsField('maxy_coor', QVariant.Double)]
-            
+            field_list = [
+                QgsField("zoom", QVariant.Int),
+                QgsField("x_tile", QVariant.Int),
+                QgsField("y_tile_ud", QVariant.Int),
+                QgsField("y_tile_du", QVariant.Int),
+                QgsField("minx_coor", QVariant.Double),
+                QgsField("miny_coor", QVariant.Double),
+                QgsField("maxx_coor", QVariant.Double),
+                QgsField("maxy_coor", QVariant.Double),
+                QgsField("quadkey", QVariant.String),
+            ]
+
             for f in field_list:
                 fields.append(f)
-            
-            writer = QgsVectorFileWriter(out_path, 'UTF-8', fields, QgsWkbTypes.Polygon, QgsCoordinateReferenceSystem.fromEpsgId(srs), driver)
-            
+
+            writer = QgsVectorFileWriter(
+                out_path,
+                "UTF-8",
+                fields,
+                QgsWkbTypes.Polygon,
+                QgsCoordinateReferenceSystem.fromEpsgId(srs),
+                driver,
+            )
+
             for i, row in df_all.iterrows():
                 feat = QgsFeature()
                 feat.setGeometry(QgsGeometry.fromWkt(row["geometry"]))
                 feat.setAttributes(row.iloc[:-1].tolist())
                 writer.addFeature(feat)
-                
-            del(writer)
-            self.iface.addVectorLayer(out_path, '', 'ogr')
-            
+
+            del writer
+            self.iface.addVectorLayer(out_path, "", "ogr")
+
     def createBox(self, minx, miny, maxx, maxy):
         return box(minx, miny, maxx, maxy).wkt
-        
+
+    def get_quadkey(self, x, y, z):
+        quadKey = ""
+        for i in range(z, 0, -1):
+            digit = 0
+            mask = 1 << (i - 1)
+            if (x & mask) != 0:
+                digit += 1
+            if (y & mask) != 0:
+                digit += 2
+            quadKey += str(digit)
+        return quadKey
+
     def createData(self, report, minx, miny, maxx, maxy, srs):
         vec_createBox = np.vectorize(self.createBox)
         if srs == 4326:
-            w_minx, w_miny, w_maxx, w_maxy = -180, -85.05112877980660357, 180, 85.05112877980660357 #EPSG:4326
+            w_minx, w_miny, w_maxx, w_maxy = (
+                -180,
+                -85.05112877980660357,
+                180,
+                85.05112877980660357,
+            )  # EPSG:4326
         else:
-            w_minx, w_miny, w_maxx, w_maxy = -20037508.3428, -20037508.3428, 20037508.3428, 20037508.3428 #EPSG:3857
-        
+            w_minx, w_miny, w_maxx, w_maxy = (
+                -20037508.3428,
+                -20037508.3428,
+                20037508.3428,
+                20037508.3428,
+            )  # EPSG:3857
+
         df_all = pd.DataFrame()
-        for z,r in report.items():
+        for z, r in report.items():
             if isinstance(z, int):
-                grid_size = (w_maxx-w_minx)/2**z
-                
+                grid_size = (w_maxx - w_minx) / 2**z
+
                 tile_x_start = int((minx - w_minx) / grid_size)
                 tile_x_end = int((maxx - w_minx) / grid_size)
                 tile_y_start = int((w_maxy - maxy) / grid_size)
                 tile_y_end = int((w_maxy - miny) / grid_size)
-                
+
                 tile_x_list = np.arange(tile_x_start, tile_x_end + 1)
                 tile_y_list = np.arange(tile_y_start, tile_y_end + 1)
-                
+
                 coor_x_list = w_minx + (tile_x_list * grid_size)
                 coor_y_list = w_maxy - (tile_y_list * grid_size)
-                
+
                 tx, ty = np.meshgrid(tile_x_list, tile_y_list)
-                tiles = np.hstack((tx.reshape(-1,1), ty.reshape(-1,1), (2**z -1 - ty.reshape(-1,1))))    
-                
+                tiles = np.hstack(
+                    (
+                        tx.reshape(-1, 1),
+                        ty.reshape(-1, 1),
+                        (2**z - 1 - ty.reshape(-1, 1)),
+                    )
+                )
+
                 mx, my = np.meshgrid(coor_x_list, coor_y_list)
-                coors = np.hstack((mx.reshape(-1,1), my.reshape(-1,1)))
-                
-                df = pd.DataFrame(np.hstack([tiles, coors]), columns=["x_tile", "wmts_y_tile", "tms_y_tile" ,"minx_coor", "maxy_coor"])
+                coors = np.hstack((mx.reshape(-1, 1), my.reshape(-1, 1)))
+
+                df = pd.DataFrame(
+                    np.hstack([tiles, coors]),
+                    columns=[
+                        "x_tile",
+                        "wmts_y_tile",
+                        "tms_y_tile",
+                        "minx_coor",
+                        "maxy_coor",
+                    ],
+                )
                 df.insert(0, "zoom", z)
-                
+
                 df["maxx_coor"] = df["minx_coor"] + grid_size
                 df["miny_coor"] = df["maxy_coor"] - grid_size
-                
-                df = df.loc[:,['zoom', 'x_tile', 'wmts_y_tile', "tms_y_tile", 'minx_coor', 'miny_coor', 'maxx_coor', 'maxy_coor']]
-                df.loc[:,['zoom', 'x_tile', 'wmts_y_tile', "tms_y_tile"]] = df.loc[:,['zoom', 'x_tile', 'wmts_y_tile', "tms_y_tile"]].astype(int)
-                
-                df["geometry"] = vec_createBox(minx=df.minx_coor, miny=df.miny_coor, maxx=df.maxx_coor, maxy=df.maxy_coor)
-                
+
+                df = df.loc[
+                    :,
+                    [
+                        "zoom",
+                        "x_tile",
+                        "wmts_y_tile",
+                        "tms_y_tile",
+                        "minx_coor",
+                        "miny_coor",
+                        "maxx_coor",
+                        "maxy_coor",
+                    ],
+                ]
+                df.loc[:, ["zoom", "x_tile", "wmts_y_tile", "tms_y_tile"]] = df.loc[
+                    :, ["zoom", "x_tile", "wmts_y_tile", "tms_y_tile"]
+                ].astype(int)
+
+                df["quadkey"] = df.apply(
+                    lambda x: self.get_quadkey(
+                        int(x["x_tile"]), int(x["wmts_y_tile"]), int(x["zoom"])
+                    ),
+                    axis=1,
+                )
+                df["geometry"] = vec_createBox(
+                    minx=df.minx_coor,
+                    miny=df.miny_coor,
+                    maxx=df.maxx_coor,
+                    maxy=df.maxy_coor,
+                )
+
                 df_all = pd.concat([df_all, df])
-        
+
         return df_all
-    
+
     def fillCombo(self):
         val_min = self.dlg.cb_minzoom.currentText()
         val_max = self.dlg.cb_maxzoom.currentText()
-        
+
         if int(val_min) > int(val_max):
             self.dlg.lbl_checkzoom.setStyleSheet("color:red;")
             self.dlg.lbl_checkzoom.setText("Invalid zoom levels!")
@@ -436,62 +583,85 @@ class TileIndexGenerator:
         else:
             self.dlg.lbl_checkzoom.setText("")
             self.dlg.btn_execute.setEnabled(True)
-            
-    def execute(self):
-        self.drv_list = {"shp" : "ESRI Shapefile",
-                         "gpkg" : "GPKG",
-                         "geojson" : "GeoJSON",
-                         "gml" : "GML"}
 
-        
+    def execute(self):
+        self.drv_list = {
+            "shp": "ESRI Shapefile",
+            "gpkg": "GPKG",
+            "geojson": "GeoJSON",
+            "gml": "GML",
+        }
+
         self.val_min = self.dlg.cb_minzoom.currentText()
         self.val_max = self.dlg.cb_maxzoom.currentText()
-        self.zoom_levels = range(int(self.val_min), int(self.val_max)+1)
-        
+        self.zoom_levels = range(int(self.val_min), int(self.val_max) + 1)
+
         self.minx = self.dlg.sb_extent_minx.value()
         self.miny = self.dlg.sb_extent_miny.value()
         self.maxx = self.dlg.sb_extent_maxx.value()
         self.maxy = self.dlg.sb_extent_maxy.value()
-        
+
         self.srs_text = self.dlg.lbl_srs.text()
-        
+
         if self.srs_text == "Unavaliable":
-            QMessageBox.critical(None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326")
+            QMessageBox.critical(
+                None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326"
+            )
         elif (self.minx == self.maxx) or (self.miny == self.maxy):
             QMessageBox.critical(None, "ERROR", "Canvas extent is invalid!")
         else:
             self.srs = int(self.srs_text.split(":")[1])
-            self.report = self.getInfo(self.zoom_levels, self.minx, self.miny, self.maxx, self.maxy, self.srs)
-            res = QMessageBox.question(None, "Number of Tiles", f"""The number of tile is {self.report["all"]["number_of_tiles"]}.\nDo you want to continue?""")
-            
+            self.report = self.getInfo(
+                self.zoom_levels, self.minx, self.miny, self.maxx, self.maxy, self.srs
+            )
+            res = QMessageBox.question(
+                None,
+                "Number of Tiles",
+                f"""The number of tile is {self.report["all"]["number_of_tiles"]}.\nDo you want to continue?""",
+            )
+
             if res == QMessageBox.Yes:
-                self.df_all = self.createData(self.report, self.minx, self.miny, self.maxx, self.maxy, self.srs)
-                
-                self.out_path = self.dlg.le_outputFile.text() 
-                
+                self.df_all = self.createData(
+                    self.report, self.minx, self.miny, self.maxx, self.maxy, self.srs
+                )
+
+                self.out_path = self.dlg.le_outputFile.text()
+
                 if self.out_path:
                     self.folder, self.file = os.path.split(self.out_path)
-                    self.driver = self.drv_list.get(self.file.split(".")[-1].lower(), None)
+                    self.driver = self.drv_list.get(
+                        self.file.split(".")[-1].lower(), None
+                    )
                     if (os.path.isdir(self.folder)) and (self.driver):
-                        self.createShp(self.df_all, self.srs, out_path=self.out_path, driver=self.driver)
+                        self.createShp(
+                            self.df_all,
+                            self.srs,
+                            out_path=self.out_path,
+                            driver=self.driver,
+                        )
                         self.dlg.close()
                     else:
                         QMessageBox.critical(None, "Error", """Invalid output!""")
-                        
+
                 else:
                     self.createShp(self.df_all, self.srs, out_path=None, driver=None)
                     self.dlg.close()
             else:
                 pass
-                
+
     def selectOutput(self):
         self.dlg.le_outputFile.setText("")
-        self.shpPath, self._filter = QFileDialog.getSaveFileName(self.dlg, "Select output file", "", 'ESRI Shapefile (*.shp);;\
+        self.shpPath, self._filter = QFileDialog.getSaveFileName(
+            self.dlg,
+            "Select output file",
+            "",
+            "ESRI Shapefile (*.shp);;\
                                                                                                       Geopackage (*.gpkg);;\
                                                                                                       GeoJSON (*.geojson);;\
-                                                                                                      GML (*.gml)')
-        self.dlg.le_outputFile.setText(self.shpPath)        
-                
+                                                                                                      GML (*.gml)",
+        )
+        self.dlg.le_outputFile.setText(self.shpPath)
+
     def run(self):
         """Run method that performs all the real work"""
 
@@ -500,30 +670,32 @@ class TileIndexGenerator:
         if self.first_start == True:
             # self.first_start = False
             self.dlg = TileIndexGeneratorDialog()
-            
+
             self.srs = self.canvas.crs().authid()
             if self.srs not in ("EPSG:3857", "EPSG:4326"):
-                QMessageBox.critical(None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326")
+                QMessageBox.critical(
+                    None, "ERROR", "Available SRSs --> EPSG:3857, EPSG:4326"
+                )
                 return
-            
+
             self.dlg.lbl_srs.setText(self.srs)
-            
+
             self.layers = [v.name() for v in QgsProject.instance().mapLayers().values()]
             self.dlg.cb_layers.clear()
             self.dlg.cb_layers.addItems(self.layers)
             self.dlg.cb_minzoom.addItems([str(i) for i in range(22)])
             self.dlg.cb_maxzoom.addItems([str(i) for i in range(22)])
-                        
+
             self.dlg.btn_canvasExtent.clicked.connect(self.getCanvasExtent)
             self.dlg.btn_layerextent.clicked.connect(self.getLayerExtent)
-            self.dlg.tbtn_draw.clicked.connect(lambda x:self.getDrawnCoor(self.iface.mapCanvas()))            
+            self.dlg.tbtn_draw.clicked.connect(
+                lambda x: self.getDrawnCoor(self.iface.mapCanvas())
+            )
             self.dlg.cb_minzoom.currentTextChanged.connect(self.fillCombo)
             self.dlg.cb_maxzoom.currentTextChanged.connect(self.fillCombo)
             self.dlg.btn_execute.clicked.connect(self.execute)
             self.dlg.btn_browse.clicked.connect(self.selectOutput)
-            
-            
-         
+
         # show the dialog
         self.dlg.show()
         # # Run the dialog event loop
@@ -533,4 +705,3 @@ class TileIndexGenerator:
         #     # Do something useful here - delete the line containing pass and
         #     # substitute with your code.
         #     pass
-            

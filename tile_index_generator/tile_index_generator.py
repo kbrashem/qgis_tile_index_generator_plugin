@@ -35,6 +35,7 @@ import os.path, os
 import numpy as np
 from shapely.geometry import box
 import pandas as pd
+import geopandas as gpd
 
 from .DrawRect import RectangleMapTool
 from qgis.core import (
@@ -596,12 +597,12 @@ class TileIndexGenerator:
         self.val_max = self.dlg.cb_maxzoom.currentText()
         self.zoom_levels = range(int(self.val_min), int(self.val_max) + 1)
 
+        self.srs_text = self.dlg.lbl_srs.text()
+
         self.minx = self.dlg.sb_extent_minx.value()
         self.miny = self.dlg.sb_extent_miny.value()
         self.maxx = self.dlg.sb_extent_maxx.value()
         self.maxy = self.dlg.sb_extent_maxy.value()
-
-        self.srs_text = self.dlg.lbl_srs.text()
 
         if self.srs_text == "Unavaliable":
             QMessageBox.critical(
@@ -610,7 +611,16 @@ class TileIndexGenerator:
         elif (self.minx == self.maxx) or (self.miny == self.maxy):
             QMessageBox.critical(None, "ERROR", "Canvas extent is invalid!")
         else:
-            self.srs = int(self.srs_text.split(":")[1])
+            if self.srs_text == "EPSG:4326":
+                df_srs = gpd.GeoDataFrame(
+                    {"geometry": [box(self.minx, self.miny, self.maxx, self.maxy)]},
+                    crs=4326,
+                )
+                df_srs = df_srs.to_crs(3857)
+                self.minx, self.miny, self.maxx, self.maxy = (
+                    df_srs.geometry.bounds.values[0]
+                )
+            self.srs = 3857
             self.report = self.getInfo(
                 self.zoom_levels, self.minx, self.miny, self.maxx, self.maxy, self.srs
             )
